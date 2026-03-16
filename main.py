@@ -1,26 +1,51 @@
 import struct
 import math
-
-
-# --- TYMCZASOWE ZAŚLEPKI (To dostarczy kolega) ---
-class Signal:
-    def __init__(self, name="Testowy", samples=None, fs=1.0, t0=0.0):
-        self.name = name
-        self.samples = samples if samples else [0.0] * 100
-        self.fs = fs
-        self.t0 = t0
-        self.is_complex = 0
-
-    def calculate_params(self):
-        # Symulacja obliczeń z punktu 2
-        return {"Mean": 0.5, "RMS": 0.707, "Variance": 0.25}
-
+import numpy as np
+from signals import Signal, ContinousSignal, DiscreteSignal
 
 # --- TWOJA LOGIKA MENU I OPERACJI ---
 class SignalApp:
     def __init__(self):
         self.active_signal = None
         self.buffer_signal = None
+    
+    def create_test_signal(self):
+    #Tworzy testowy sygnał dyskretny
+        print("\n--- GENEROWANIE SYGNAŁU TESTOWEGO ---")
+        print("1. Sygnał ciągły (zostanie zdyskretyzowany)")
+        print("2. Sygnał dyskretny")
+        choice = input("Wybierz typ: ")
+
+        if choice == '1':
+            # Tworzenie sygnału ciągłego
+            signal_type = input("Typ sygnału (sin/prostokat/piła): ")
+            # W zależności od typu wyświetlamy potrzebne parametry do wypełnienia
+            # Na razie tego nie ma
+            print("\nParametry sygnału ciągłego:")
+            A = float(input("Amplituda: "))
+            t1 = float(input("Czas początkowy: "))
+            d = float(input("Czas trwania: "))
+            T = float(input("Okres: "))
+            k = float(input("Wypełnienie: "))
+            ts = float(input("Czas skoku: "))
+            
+            print("Sygnał ciągły utworzony.")
+            
+        elif choice == '2':
+            # Tworzenie sygnału dyskretnego
+            print("\nParametry sygnału dyskretnego:")
+            signal_type = input("Typ sygnału (sin/prostokat/szum): ")
+            # W zależności od typu wyświetlamy potrzebne parametry do wypełnienia
+            # Na razie tego nie ma
+            A = float(input("Amplituda: "))
+            n1 = int(input("Numer pierwszej próbki: "))
+            t1 = float(input("Czas początkowy: "))
+            ns = int(input("Próbka skoku: "))
+            f = float(input("Częstotliwość próbkowania: "))
+            d = float(input("Czas trwania: "))
+            p = float(input("Prawdopodobieństwo: "))
+            
+        print("Sygnał testowy wygenerowany!")
 
     def save_binary(self, signal, filename):
         """Implementacja punktu 3 - zapis binarny (double precision)"""
@@ -50,38 +75,97 @@ class SignalApp:
         except Exception as e:
             print(f"Błąd odczytu: {e}")
             return None
+    def perform_operation(self, operation):
+        print("Operacja dokonana")
 
     def run(self):
         while True:
-            print(f"\n--- AKTYWNY: {self.active_signal.name if self.active_signal else 'Brak'} ---")
-            print("1. Generuj (testowy)")
-            print("2. Zapisz aktywny")
-            print("3. Wczytaj do bufora")
-            print("4. Wykonaj operację (Aktywny + Bufor)")
+            print("\n" + "="*50)
+            active_name = self.active_signal.signal_type if self.active_signal else 'Brak'
+            buffer_name = self.buffer_signal.signal_type if self.buffer_signal else 'Brak'
+            print(f"AKTYWNY: {active_name} | BUFOR: {buffer_name}")
+            print("="*50)
+            print("1. Generuj sygnał testowy")
+            print("2. Wyświetl informacje o sygnale aktywnym")
+            print("3. Wyświetl informacje o buforze")
+            print("4. Zapisz aktywny sygnał do pliku")
+            print("5. Wczytaj sygnał z pliku do bufora")
+            print("6. Wykonaj operację (Aktywny + Bufor)")
+            print("7. Rysuj wykres sygnału aktywnego")
+            print("8. Rysuj histogram sygnału aktywnego")
+            print("9. Oblicz parametry sygnału aktywnego")
+            print("10. Przenieś bufor do aktywnego")
             print("0. Wyjście")
 
-            choice = input("Wybierz: ")
+            choice = input("\nWybierz opcję: ")
 
             if choice == '1':
-                self.active_signal = Signal("Wygenerowany", [math.sin(x / 10) for x in range(100)])
-                print("Sygnał wygenerowany!")
+                self.create_test_signal()
+
             elif choice == '2':
-                if self.active_signal:
-                    self.save_binary(self.active_signal, "signal.bin")
-                else:
-                    print("Brak sygnału!")
+                self.display_signal_info(self.active_signal, "Aktywny")
+
             elif choice == '3':
-                self.buffer_signal = self.load_binary("signal.bin")
-                if self.buffer_signal: print("Wczytano do bufora.")
+                self.display_signal_info(self.buffer_signal, "Bufor")
+
             elif choice == '4':
+                if self.active_signal:
+                    filename = input("Podaj nazwę pliku (np. signal.bin): ")
+                    self.save_binary(self.active_signal, filename)
+                else:
+                    print("Brak aktywnego sygnału!")
+
+            elif choice == '5':
+                filename = input("Podaj nazwę pliku do wczytania: ")
+                self.buffer_signal = self.load_binary(filename)
+                if self.buffer_signal:
+                    print("Wczytano do bufora.")
+
+            elif choice == '6':
                 if self.active_signal and self.buffer_signal:
-                    # Automatyczny zapis po operacji (Punkt 4)
-                    new_samples = [a + b for a, b in zip(self.active_signal.samples, self.buffer_signal.samples)]
-                    self.active_signal = Signal("Wynik", new_samples)
-                    self.save_binary(self.active_signal, "wynik_operacji.bin")
-                    print("Operacja wykonana i zapisana.")
+                    print("\nDostępne operacje: + (dodawanie), - (odejmowanie), * (mnożenie), / (dzielenie)")
+                    op = input("Wybierz operację: ")
+                    self.perform_operation(op)
+                else:
+                    print("Brak wymaganych sygnałów!")
+
+            elif choice == '7':
+                if self.active_signal:
+                    self.active_signal.draw_plot()
+                else:
+                    print("Brak aktywnego sygnału!")
+
+            elif choice == '8':
+                if self.active_signal:
+                    try:
+                        range_val = float(input("Podaj zakres histogramu: "))
+                        self.active_signal.draw_histogram(range_val)
+                    except ValueError:
+                        print("Podaj poprawną liczbę!")
+                else:
+                    print("Brak aktywnego sygnału!")
+
+            elif choice == '9':
+                if self.active_signal:
+                    result = self.active_signal.calculate_parameters()
+                    print(f"Wynik obliczeń parametrów: {result}")
+                else:
+                    print("Brak aktywnego sygnału!")
+
+            elif choice == '10':
+                if self.buffer_signal:
+                    self.active_signal = self.buffer_signal
+                    self.buffer_signal = None
+                    print("Przeniesiono bufor do aktywnego sygnału.")
+                else:
+                    print("Bufor jest pusty!")
+
             elif choice == '0':
+                print("Do widzenia!")
                 break
+
+            else:
+                print("Nieprawidłowy wybór!")
 
 
 if __name__ == "__main__":
