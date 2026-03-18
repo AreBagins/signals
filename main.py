@@ -44,6 +44,10 @@ class SignalApp:
             f = float(input("Częstotliwość próbkowania: "))
             d = float(input("Czas trwania: "))
             p = float(input("Prawdopodobieństwo: "))
+            if(signal_type=="K"):
+                print("Wybrano delte kroneckera")
+                signal = DiscreteSignal("K",A,n1,t1,ns,f,d,p)
+                signal.draw_plot()
             
         print("Sygnał testowy wygenerowany!")
 

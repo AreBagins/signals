@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Signal:
     def __init__(self,type):
@@ -37,21 +38,40 @@ class ContinousSignal(Signal):
     def save(self,path):
         print("saved discreticised signal")
 
+    def draw_plot(self):
+        print("plot")
+
+    def draw_histogram(self,range):
+        print(range)
+
 class DiscreteSignal(Signal):
-    def __init__(self,type,amplitude,first_sample,start_time,jump_sample,sampling_freq,duration,propability):
-        super().__init__(type)
-        self.A = amplitude
-        self.n1 = first_sample
-        self.t1 = start_time
-        self.ns = jump_sample
-        self.f = sampling_freq
-        self.d = duration
-        self.p = propability
-        self.samples = np.empty()
-
-    def __init__(self,sample_array):
-        self.samples = sample_array
-
+    def __init__(self, *args, **kwargs):
+            if(len(args)==8):
+                super().__init__(args[0])
+                self.A = args[1]
+                self.n1 = args[2]
+                self.t1 = args[3]
+                self.ns = args[4]
+                self.f = args[5]
+                self.d = args[6]
+                self.p = args[7]
+                if(self.signal_type=="K"):
+                    #Postać tablicy sygnałów:
+                    #Rząd 0: czas pobrania próbki(n)
+                    #Rząd 1: wartość sygnału w n
+                    self.samples = np.zeros((2,int(25*self.f)))
+                    for col in range(self.samples.shape[1]):
+                        self.samples[0,col]=self.n1+col*(1/self.f)
+                        if(self.samples[0,col]==self.ns):
+                            self.samples[1,col]=self.A
+                        else:
+                            self.samples[1,col]=0
+                else:
+                    self.samples = np.empty()
+            elif(len(args)==1):
+                    self.samples = args[1]
+            else:
+                print("Wrong amount of params")
     def __add__(self, other):
         pass
     def __sub__(self, other):
@@ -60,3 +80,14 @@ class DiscreteSignal(Signal):
         pass
     def __truediv__(self, other):
         pass
+
+    def draw_plot(self):
+        fig, ax = plt.subplots()
+        ax.axhline(color='b',ls='--')
+        ax.axvline(color='b',ls='--')
+        ax.plot(self.samples[0,:], self.samples[1,:],'ro')
+        ax.set(xlabel='t (s)', ylabel='A')
+        plt.show()
+
+    def draw_histogram(self,range):
+        print(range)
