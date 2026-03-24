@@ -1,83 +1,89 @@
 import struct
-import numpy as np
-from signals import ContinousSignal, DiscreteSignal
+import math
 
 
+# --- TYMCZASOWE ZAŚLEPKI (To dostarczy kolega) ---
+class Signal:
+    def __init__(self, name="Testowy", samples=None, fs=1.0, t0=0.0):
+        self.name = name
+        self.samples = samples if samples else [0.0] * 100
+        self.fs = fs
+        self.t0 = t0
+        self.is_complex = 0
+
+    def calculate_params(self):
+        # Symulacja obliczeń z punktu 2
+        return {"Mean": 0.5, "RMS": 0.707, "Variance": 0.25}
+
+
+# --- TWOJA LOGIKA MENU I OPERACJI ---
 class SignalApp:
     def __init__(self):
         self.active_signal = None
+        self.buffer_signal = None
 
-    def create_signal(self):
-        print("\n--- GENERATOR (S4-S9, S11) ---")
-        stype = input("Kod sygnału: ").upper()
-        A = float(input("Amplituda (A): "))
-        t1 = float(input("Czas pocz. (t1): "))
-        d = float(input("Czas trwania (d): "))
-
-        if stype == "S11":
-            fs = float(input("Częstotliwość próbkowania (fs): "))
-            p = float(input("Prawdopodobieństwo (p): "))
-            self.active_signal = DiscreteSignal("S11", A, t1, d, fs, p=p)
-        else:
-            T = float(input("Okres (T): ")) if stype in ["S4", "S5", "S6", "S7", "S8"] else None
-            kw = float(input("Wypełnienie (kw): ")) if stype in ["S6", "S7", "S8"] else None
-            ts = float(input("Czas skoku (ts): ")) if stype == "S9" else None
-            self.active_signal = ContinousSignal(stype, A, t1, d, T, kw, ts)
-        print("Utworzono sygnał.")
-
-    def save_binary(self):
-        if not self.active_signal: return
-        fname = input("Nazwa pliku (.bin): ")
-        fs = float(input("Częstotliwość próbkowania do zapisu: "))
-
-        # Dyskretyzacja "w locie" dla sygnałów ciągłych
-        if isinstance(self.active_signal, ContinousSignal):
-            t_disc = self.active_signal.t1 + np.arange(int(self.active_signal.d * fs)) / fs
-            samples = np.interp(t_disc, self.active_signal.t, self.active_signal.samples)
-            t1 = self.active_signal.t1
-        else:
-            samples = self.active_signal.samples
-            t1 = self.active_signal.t1
-            fs = self.active_signal.fs
-
-        with open(fname, 'wb') as f:
-            # Nagłówek: t1(d), fs(d), is_complex(i), n(i)
-            f.write(struct.pack('ddii', t1, fs, 0, len(samples)))
-            for s in samples:
-                f.write(struct.pack('d', s))
-        print("Zapisano.")
-
-    def load_binary(self):
-        fname = input("Plik do odczytu: ")
+    def save_binary(self, signal, filename):
+        """Implementacja punktu 3 - zapis binarny (double precision)"""
         try:
-            with open(fname, 'rb') as f:
-                h = f.read(24)
-                t1, fs, _, n = struct.unpack('ddii', h)
-                data = [struct.unpack('d', f.read(8))[0] for _ in range(n)]
-                self.active_signal = DiscreteSignal(f"Plik:{fname}", 0, t1, 0, fs, samples=data)
-                print(f"Wczytano {n} próbek.")
+            with open(filename, 'wb') as f:
+                # Nagłówek: t0 (d), fs (d), is_complex (i), n_samples (i)
+                header = struct.pack('ddii', signal.t0, signal.fs, signal.is_complex, len(signal.samples))
+                f.write(header)
+                # Dane: amplitudy (double)
+                for s in signal.samples:
+                    f.write(struct.pack('d', s))
+            print(f"Poprawnie zapisano do: {filename}")
         except Exception as e:
-            print(f"Błąd: {e}")
+            print(f"Błąd zapisu: {e}")
+
+    def load_binary(self, filename):
+        """Implementacja punktu 3 - odczyt binarny"""
+        try:
+            with open(filename, 'rb') as f:
+                header_data = f.read(24)  # 8+8+4+4 bajty
+                t0, fs, is_complex, n = struct.unpack('ddii', header_data)
+                samples = []
+                for _ in range(n):
+                    sample = struct.unpack('d', f.read(8))[0]
+                    samples.append(sample)
+                return Signal(name=filename, samples=samples, fs=fs, t0=t0)
+        except Exception as e:
+            print(f"Błąd odczytu: {e}")
+            return None
 
     def run(self):
         while True:
-            act = self.active_signal.signal_type if self.active_signal else "Brak"
-            print(f"\n--- AKTYWNY: {act} ---")
-            print("1. Generuj | 2. Parametry | 3. Wykres | 4. Zapisz | 5. Odczyt | 0. Wyjście")
-            c = input("Wybór: ")
-            if c == '1':
-                self.create_signal()
-            elif c == '2' and self.active_signal:
-                for k, v in self.active_signal.calculate_parameters().items(): print(f"{k}: {v:.4f}")
-            elif c == '3' and self.active_signal:
-                self.active_signal.draw_plot()
-            elif c == '4':
-                self.save_binary()
-            elif c == '5':
-                self.load_binary()
-            elif c == '0':
+            print(f"\n--- AKTYWNY: {self.active_signal.name if self.active_signal else 'Brak'} ---")
+            print("1. Generuj (testowy)")
+            print("2. Zapisz aktywny")
+            print("3. Wczytaj do bufora")
+            print("4. Wykonaj operację (Aktywny + Bufor)")
+            print("0. Wyjście")
+
+            choice = input("Wybierz: ")
+
+            if choice == '1':
+                self.active_signal = Signal("Wygenerowany", [math.sin(x / 10) for x in range(100)])
+                print("Sygnał wygenerowany!")
+            elif choice == '2':
+                if self.active_signal:
+                    self.save_binary(self.active_signal, "signal.bin")
+                else:
+                    print("Brak sygnału!")
+            elif choice == '3':
+                self.buffer_signal = self.load_binary("signal.bin")
+                if self.buffer_signal: print("Wczytano do bufora.")
+            elif choice == '4':
+                if self.active_signal and self.buffer_signal:
+                    # Automatyczny zapis po operacji (Punkt 4)
+                    new_samples = [a + b for a, b in zip(self.active_signal.samples, self.buffer_signal.samples)]
+                    self.active_signal = Signal("Wynik", new_samples)
+                    self.save_binary(self.active_signal, "wynik_operacji.bin")
+                    print("Operacja wykonana i zapisana.")
+            elif choice == '0':
                 break
 
 
 if __name__ == "__main__":
-    SignalApp().run()
+    app = SignalApp()
+    app.run()
