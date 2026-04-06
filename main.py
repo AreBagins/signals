@@ -1,47 +1,126 @@
+# main.py (poprawiony)
 import struct
 import numpy as np
-from signals import ContinousSignal, DiscreteSignal
+from signals import ContinousSignal, DiscreteSignal, translate, SIGNAL_DESCRIPTIONS
+
+
+def validate_float(prompt, min_val=None, max_val=None, default=None):
+    """Walidacja liczby zmiennoprzecinkowej z opcjonalnym zakresem."""
+    while True:
+        try:
+            val = input(prompt).strip()
+            if not val and default is not None:
+                return default
+            f = float(val)
+            if min_val is not None and f < min_val:
+                print(f"Wartość nie może być mniejsza niż {min_val}.")
+                continue
+            if max_val is not None and f > max_val:
+                print(f"Wartość nie może być większa niż {max_val}.")
+                continue
+            return f
+        except ValueError:
+            print("Proszę podać liczbę.")
+
+
+def validate_int(prompt, min_val=None, max_val=None, default=None):
+    """Walidacja liczby całkowitej."""
+    while True:
+        try:
+            val = input(prompt).strip()
+            if not val and default is not None:
+                return default
+            i = int(val)
+            if min_val is not None and i < min_val:
+                print(f"Wartość nie może być mniejsza niż {min_val}.")
+                continue
+            if max_val is not None and i > max_val:
+                print(f"Wartość nie może być większa niż {max_val}.")
+                continue
+            return i
+        except ValueError:
+            print("Proszę podać liczbę całkowitą.")
+
+
+def show_signal_list():
+    """Wyświetla listę dostępnych sygnałów z opisami."""
+    print("\nDostępne kody sygnałów:")
+    for code, desc in SIGNAL_DESCRIPTIONS.items():
+        print(f"  {code}: {desc}")
 
 
 class SignalApp:
     def __init__(self):
         self.active_signal = None
+        self.fs = 1000.0  # Domyślna częstotliwość próbkowania
 
     def create_signal(self):
-        print("\n--- GENERATOR (S4-S9, S11) ---")
+        """Tworzy nowy sygnał na podstawie kodu i parametrów z walidacją."""
+        show_signal_list()
         stype = input("Kod sygnału: ").upper()
-        A = float(input("Amplituda (A): "))
-        t1 = float(input("Czas pocz. (t1): "))
-        d = float(input("Czas trwania (d): "))
+        if stype not in SIGNAL_DESCRIPTIONS:
+            print("Nieznany kod sygnału.")
+            return None
 
-        if stype == "S11":
-            fs = float(input("Częstotliwość próbkowania (fs): "))
-            p = float(input("Prawdopodobieństwo (p): "))
-            self.active_signal = DiscreteSignal("S11", A, t1, d, fs, p=p)
+        A = validate_float("Amplituda (A): ",min_val=0.0001)
+        t1 = validate_float("Czas początkowy (t1): ")
+        d = validate_float("Czas trwania (d): ", min_val=0.0001)
+
+        if stype in ("S10", "S11"):
+            fs = validate_float("Częstotliwość próbkowania (fs) [Hz]: ", min_val=0.1)
+            if stype == "S11":
+                p = validate_float("Prawdopodobieństwo (p) [0..1]: ", min_val=0, max_val=1)
+                signal = DiscreteSignal(stype, A, t1, d, fs, p=p)
+            else:  # S10
+                # liczba próbek
+                n_samples = int(d * fs)
+                max_index = n_samples - 1
+                if max_index < 0:
+                    print("Błąd: czas trwania za krótki dla podanej fs.")
+                    return None
+                p = validate_int(f"Numer próbki skoku (0..{max_index}): ", min_val=0, max_val=max_index)
+                signal = DiscreteSignal(stype, A, t1, d, fs, p=p)
+            return signal
+
+        # Sygnały ciągłe
+        T = None
+        kw = None
+        ts = None
+        if stype in ("S3", "S4", "S5", "S6", "S7", "S8"):
+            T = validate_float("Okres (T) [s]: ", min_val=0.0001)
+        if stype in ("S6", "S7", "S8"):
+            kw = validate_float("Wypełnienie (kw) [0..1]: ", min_val=0, max_val=1)
+        if stype == "S9":
+            ts = validate_float("Czas skoku (ts) [s]: ")
+        signal = ContinousSignal(stype, A, t1, d, T, kw, ts)
+        print(f"Utworzono sygnał {stype}: {SIGNAL_DESCRIPTIONS[stype]}")
+        return signal
+
+    def discretize_current(self):
+        if self.active_signal is None:
+            print("Brak aktywnego sygnału.")
+            return
+        if isinstance(self.active_signal, DiscreteSignal):
+            print("Sygnał jest już dyskretny.")
+            return
+        if isinstance(self.active_signal, ContinousSignal):
+            self.active_signal = self.active_signal.to_discrete(self.fs)
+            print(f"Przekonwertowano na sygnał dyskretny z fs={self.fs} Hz.")
         else:
-            T = float(input("Okres (T): ")) if stype in ["S4", "S5", "S6", "S7", "S8"] else None
-            kw = float(input("Wypełnienie (kw): ")) if stype in ["S6", "S7", "S8"] else None
-            ts = float(input("Czas skoku (ts): ")) if stype == "S9" else None
-            self.active_signal = ContinousSignal(stype, A, t1, d, T, kw, ts)
-        print("Utworzono sygnał.")
+            print("Nieznany typ sygnału.")
 
     def save_binary(self):
-        if not self.active_signal: return
-        fname = input("Nazwa pliku (.bin): ")
-        fs = float(input("Częstotliwość próbkowania do zapisu: "))
-
-        # Dyskretyzacja "w locie" dla sygnałów ciągłych
+        if not self.active_signal:
+            print("Brak aktywnego sygnału.")
+            return
         if isinstance(self.active_signal, ContinousSignal):
-            t_disc = self.active_signal.t1 + np.arange(int(self.active_signal.d * fs)) / fs
-            samples = np.interp(t_disc, self.active_signal.t, self.active_signal.samples)
-            t1 = self.active_signal.t1
-        else:
-            samples = self.active_signal.samples
-            t1 = self.active_signal.t1
-            fs = self.active_signal.fs
-
+            print("Sygnał ciągły – najpierw dokonaj dyskretyzacji (opcja 3 w menu dla ciągłego).")
+            return
+        fname = input("Nazwa pliku (.bin): ")
+        fs = validate_float("Częstotliwość próbkowania do zapisu [Hz]: ", min_val=0.1)
+        samples = self.active_signal.samples
+        t1 = self.active_signal.t1
         with open(fname, 'wb') as f:
-            # Nagłówek: t1(d), fs(d), is_complex(i), n(i)
             f.write(struct.pack('ddii', t1, fs, 0, len(samples)))
             for s in samples:
                 f.write(struct.pack('d', s))
@@ -59,24 +138,124 @@ class SignalApp:
         except Exception as e:
             print(f"Błąd: {e}")
 
+    def change_fs(self):
+        new_fs = validate_float(f"Podaj nową częstotliwość próbkowania [Hz] (obecna: {self.fs}): ", min_val=0.1)
+        self.fs = new_fs
+        print(f"Ustawiono fs = {self.fs} Hz.")
+
+    def operation(self):
+        if not self.active_signal:
+            print("Brak aktywnego sygnału.")
+            return
+        if isinstance(self.active_signal, ContinousSignal):
+            print("Sygnał ciągły – najpierw dokonaj dyskretyzacji.")
+            return
+        print("Dostępne operacje: +, -, *, /")
+        o = input("Wybierz operację: ")
+        if o not in ('+', '-', '*', '/'):
+            print("Nieprawidłowa operacja.")
+            return
+        print("Tworzenie drugiego sygnału:")
+        other = self.create_signal()
+        if other is None:
+            return
+        # Konwersja drugiego sygnału na dyskretny z bieżącą fs
+        if isinstance(other, ContinousSignal):
+            other_disc = other.to_discrete(self.fs)
+        else:
+            other_disc = other
+        current = self.active_signal
+        if isinstance(current, ContinousSignal):
+            current = current.to_discrete(self.fs)
+        try:
+            if o == '+':
+                self.active_signal = current + other_disc
+            elif o == '-':
+                self.active_signal = current - other_disc
+            elif o == '*':
+                self.active_signal = current * other_disc
+            elif o == '/':
+                self.active_signal = current / other_disc
+            print("Operacja wykonana.")
+        except Exception as e:
+            print(f"Błąd podczas operacji: {e}")
+
     def run(self):
         while True:
-            act = self.active_signal.signal_type if self.active_signal else "Brak"
-            print(f"\n--- AKTYWNY: {act} ---")
-            print("1. Generuj | 2. Parametry | 3. Wykres | 4. Zapisz | 5. Odczyt | 0. Wyjście")
-            c = input("Wybór: ")
-            if c == '1':
-                self.create_signal()
-            elif c == '2' and self.active_signal:
-                for k, v in self.active_signal.calculate_parameters().items(): print(f"{k}: {v:.4f}")
-            elif c == '3' and self.active_signal:
-                self.active_signal.draw_plot()
-            elif c == '4':
-                self.save_binary()
-            elif c == '5':
-                self.load_binary()
-            elif c == '0':
-                break
+            # Wyświetlenie aktywnego sygnału z opisem
+            if self.active_signal is None:
+                act_desc = "Brak"
+                is_discrete = False
+            else:
+                code = self.active_signal.signal_type
+                desc = translate(code)
+                act_desc = f"{code} ({desc})"
+                is_discrete = isinstance(self.active_signal, DiscreteSignal)
+
+            print(f"\n--- AKTYWNY SYGNAŁ: {act_desc} (fs dyskretyzacji = {self.fs} Hz) ---")
+
+            if is_discrete:
+                print("1. Generuj nowy sygnał")
+                print("2. Pokaż parametry statystyczne")
+                print("3. Wykres / Histogram")
+                print("4. Zapisz do pliku binarnego")
+                print("5. Odczytaj z pliku binarnego")
+                print("6. Operacje arytmetyczne na sygnale")
+                print("7. Zmień częstotliwość próbkowania (fs)")
+                print("0. Wyjście")
+                c = input("Wybór: ")
+                if c == '1':
+                    new_sig = self.create_signal()
+                    if new_sig:
+                        self.active_signal = new_sig
+                elif c == '2':
+                    params = self.active_signal.calculate_parameters()
+                    for k, v in params.items():
+                        print(f"{k}: {v:.4f}")
+                elif c == '3':
+                    p = input("Typ wykresu: w (funkcja) czy h (histogram): ").lower()
+                    if p == 'w':
+                        self.active_signal.draw_plot()
+                    elif p == 'h':
+                        bins = validate_int("Liczba przedziałów histogramu: ", min_val=1)
+                        self.active_signal.draw_hist(bins)
+                    else:
+                        print("Nieprawidłowy wybór.")
+                elif c == '4':
+                    self.save_binary()
+                elif c == '5':
+                    self.load_binary()
+                elif c == '6':
+                    self.operation()
+                elif c == '7':
+                    self.change_fs()
+                elif c == '0':
+                    break
+                else:
+                    print("Nieprawidłowy wybór.")
+            else:
+                # Menu dla braku sygnału lub sygnału ciągłego
+                print("1. Generuj nowy sygnał")
+                print("2. Odczytaj sygnał z pliku binarnego")
+                if self.active_signal is not None and isinstance(self.active_signal, ContinousSignal):
+                    print("3. Dyskretyzuj aktywny sygnał ciągły (użyj bieżącej fs)")
+                print("7. Zmień częstotliwość próbkowania (fs)")
+                print("0. Wyjście")
+                c = input("Wybór: ")
+                if c == '1':
+                    new_sig = self.create_signal()
+                    if new_sig:
+                        self.active_signal = new_sig
+                elif c == '2':
+                    self.load_binary()
+                elif c == '3' and self.active_signal is not None and isinstance(self.active_signal, ContinousSignal):
+                    self.discretize_current()
+                elif c == '7':
+                    self.change_fs()
+                elif c == '0':
+                    break
+                else:
+                    print("Nieprawidłowy wybór.")
 
 
 if __name__ == "__main__":

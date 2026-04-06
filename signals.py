@@ -1,86 +1,212 @@
+# signals.py (poprawiony)
 import numpy as np
 import matplotlib.pyplot as plt
+import re
+
+# Słownik z opisami sygnałów (używany także w main.py)
+SIGNAL_DESCRIPTIONS = {
+    "S1": "Szum o rozkładzie jednostajnym",
+    "S2": "Szum gaussowski",
+    "S3": "Sygnał sinusoidalny",
+    "S4": "Sygnał sinusoidalny wyprostowany jednopołówkowo",
+    "S5": "Sygnał sinusoidalny wyprostowany dwupołówkowo",
+    "S6": "Sygnał prostokątny",
+    "S7": "Sygnał prostokątny symetryczny",
+    "S8": "Sygnał trójkątny",
+    "S9": "Skok jednostkowy",
+    "S10": "Impuls jednostkowy (delta Kroneckera)",
+    "S11": "Szum impulsowy"
+}
 
 
 class Signal:
     def __init__(self, type_name):
         self.signal_type = type_name
-        self.samples = None  # Amplitudy (y)
-        self.t = None  # Czas (x)
+        self.samples = None
+        self.t = None
 
     def draw_plot(self):
-        if self.samples is None: return
+        if self.samples is None:
+            return
         plt.figure(figsize=(10, 4))
-        plt.plot(self.t, self.samples)
-        plt.title(f"Sygnał: {self.signal_type}")
+        plt.axhline(color='b', ls='--')
+        plt.axvline(color='b', ls='--')
+        plt.plot(self.t, self.samples, 'ro', markersize=1)
+        plt.title(f"Sygnał: {translate(self.signal_type)}")
         plt.xlabel("t [s]")
         plt.ylabel("Amplituda")
         plt.grid(True)
+        plt.show()
+
+    def draw_hist(self, bins):
+        if self.samples is None:
+            return
+        x = self.samples
+        # Dla sygnałów okresowych – przycinamy do pełnych okresów
+        if hasattr(self, 'T') and self.T is not None and self.T > 0:
+            samples_per_period = int(round(self.T * self.fs))
+            if samples_per_period > 0:
+                n_full_periods = len(x) // samples_per_period
+                if n_full_periods > 0:
+                    print("Uwzględniono tylko pełne okresy.")
+                    x = x[:n_full_periods * samples_per_period]
+        plt.figure(figsize=(10, 4))
+        plt.hist(x, bins, rwidth=0.9)
+        plt.title(f"Sygnał: {translate(self.signal_type)}")
+        plt.xlabel("Wartość")
+        plt.ylabel("Ilość próbek")
         plt.show()
 
 
 class ContinousSignal(Signal):
     def __init__(self, type_name, A, t1, d, T=None, kw=None, ts=None):
         super().__init__(type_name)
-        self.A, self.t1, self.d, self.T, self.kw, self.ts = A, t1, d, T, kw, ts
-        # "Udajemy" sygnał ciągły przez gęste próbkowanie (np. 1kHz)
-        self.fs_internal = 1000
-        self.t = np.arange(t1, t1 + d, 1 / self.fs_internal)
-        self.samples = self._generate_values()
+        self.A = A
+        self.t1 = t1
+        self.d = d
+        self.T = T
+        self.kw = kw
+        self.ts = ts
 
-    def _generate_values(self):
-        t, T, t1, kw, A, ts = self.t, self.T, self.t1, self.kw, self.A, self.ts
-        if self.signal_type == "S4":  # Sin. jednopołówkowy
+    def to_discrete(self, fs):
+        n_samples = int(np.ceil(self.d * fs))
+        t = self.t1 + np.arange(n_samples) / fs
+        if len(t) > n_samples:
+            t = t[:n_samples]
+
+        A = self.A
+        T = self.T
+        kw = self.kw
+        ts = self.ts
+        t1 = self.t1
+
+        if self.signal_type == "S1":
+            samples = np.random.uniform(-A, A, len(t))
+        elif self.signal_type == "S2":
+            samples = np.random.normal(0, A / 3, len(t))
+        elif self.signal_type == "S3":
+            samples = A * np.sin(2 * np.pi * (1 / T) * (t - t1))
+        elif self.signal_type == "S4":
             sin_val = np.sin((2 * np.pi / T) * (t - t1))
-            return 0.5 * A * (sin_val + np.abs(sin_val))
-        elif self.signal_type == "S5":  # Sin. dwupołówkowy
-            return A * np.abs(np.sin((2 * np.pi / T) * (t - t1)))
-        elif self.signal_type == "S6":  # Prostokątny
-            return np.where(((t - t1) % T) < (kw * T), A, 0.0)
-        elif self.signal_type == "S7":  # Prostokątny symetryczny
-            return np.where(((t - t1) % T) < (kw * T), A, -A)
-        elif self.signal_type == "S8":  # Trójkątny
+            samples = 0.5 * A * (sin_val + np.abs(sin_val))
+        elif self.signal_type == "S5":
+            samples = A * np.abs(np.sin((2 * np.pi / T) * (t - t1)))
+        elif self.signal_type == "S6":
+            samples = np.where(((t - t1) % T) < (kw * T), A, 0.0)
+        elif self.signal_type == "S7":
+            samples = np.where(((t - t1) % T) < (kw * T), A, -A)
+        elif self.signal_type == "S8":
             term = (t - t1) % T
-            return np.where(term < kw * T, (A / (kw * T)) * term, (-A / (T * (1 - kw))) * (term - T))
-        elif self.signal_type == "S9":  # Skok jednostkowy
-            res = np.zeros_like(t)
-            res[t > ts] = A
-            res[np.isclose(t, ts)] = A / 2
-            return res
-        return np.zeros_like(t)
+            samples = np.where(term < kw * T,
+                               (A / (kw * T)) * term,
+                               (-A / (T * (1 - kw))) * (term - T))
+        elif self.signal_type == "S9":
+            samples = np.zeros_like(t)
+            samples[t > ts] = A
+            samples[np.isclose(t, ts)] = A / 2
+        else:
+            samples = np.zeros_like(t)
 
-    def calculate_parameters(self):
-        x = self.samples
-        periodic = ["S4", "S5", "S6", "S7", "S8"]
-        if self.signal_type in periodic and self.T > 0:
-            num_periods = int(self.d // self.T)
-            if num_periods > 0:
-                # Ucinamy do pełnych okresów wg instrukcji
-                x = x[:int(num_periods * self.T * self.fs_internal)]
-
-        mean = np.mean(x)
-        abs_mean = np.mean(np.abs(x))
-        var = np.var(x)
-        pow_avg = np.mean(x ** 2)
-        return {"Średnia": mean, "Śr. Bezwzględna": abs_mean, "Wariancja": var, "Moc": pow_avg, "RMS": np.sqrt(pow_avg)}
+        T_param = T if self.signal_type in ["S3", "S4", "S5", "S6", "S7", "S8"] else None
+        return DiscreteSignal(f"{self.signal_type}", self.A,
+                              self.t1, self.d, fs, samples=samples, T=T_param)
 
 
 class DiscreteSignal(Signal):
-    def __init__(self, type_name, A, t1, d, fs, p=None, samples=None):
+    def __init__(self, type_name, A, t1, d, fs, p=None, samples=None, T=None):
         super().__init__(type_name)
-        self.t1, self.fs = t1, fs
+        self.t1 = t1
+        self.fs = fs
+        self.T = T
         if samples is not None:
             self.samples = np.array(samples)
-        elif type_name == "S11":  # Szum impulsowy
+        elif type_name == "S10":
+            n = int(d * fs)
+            if n <= 0:
+                raise ValueError("Liczba próbek musi być dodatnia.")
+            self.samples = np.zeros(n)
+            if p < n:
+                self.samples[p] = A
+        elif type_name == "S11":
             n = int(d * fs)
             self.samples = np.where(np.random.rand(n) < p, A, 0.0)
+        else:
+            self.samples = np.array([])
         self.t = t1 + np.arange(len(self.samples)) / fs
 
     def calculate_parameters(self):
         x = self.samples
-        n = len(x)
-        mean = np.sum(x) / n
-        abs_mean = np.sum(np.abs(x)) / n
-        var = np.sum((x - mean) ** 2) / n
-        pow_avg = np.sum(x ** 2) / n
-        return {"Średnia": mean, "Śr. Bezwzględna": abs_mean, "Wariancja": var, "Moc": pow_avg, "RMS": np.sqrt(pow_avg)}
+        if self.T is not None and self.T > 0:
+            samples_per_period = int(round(self.T * self.fs))
+            if samples_per_period > 0:
+                n_full_periods = len(x) // samples_per_period
+                if n_full_periods > 0:
+                    x = x[:n_full_periods * samples_per_period]
+        mean = np.mean(x)
+        abs_mean = np.mean(np.abs(x))
+        var = np.var(x)
+        power = np.mean(x ** 2)
+        return {"Średnia": mean, "Śr. Bezwzględna": abs_mean,
+                "Wariancja": var, "Moc": power, "RMS": np.sqrt(power)}
+
+    def _align(self, other):
+        if not isinstance(other, DiscreteSignal):
+            raise TypeError("Operacja możliwa tylko z innym DiscreteSignal")
+        if self.fs != other.fs:
+            raise ValueError("Sygnały muszą mieć tę samą częstotliwość próbkowania")
+        if self.t1 != other.t1:
+            raise ValueError("Sygnały muszą mieć ten sam czas początkowy t1")
+        min_len = min(len(self.samples), len(other.samples))
+        return self.samples[:min_len], other.samples[:min_len], self.t1, self.fs
+
+    def __add__(self, other):
+        s1, s2, t1, fs = self._align(other)
+        result_samples = s1 + s2
+        d = len(result_samples) / fs
+        return DiscreteSignal(f"{self.signal_type}+{other.signal_type}", 0, t1, d, fs, samples=result_samples)
+
+    def __sub__(self, other):
+        s1, s2, t1, fs = self._align(other)
+        result_samples = s1 - s2
+        d = len(result_samples) / fs
+        return DiscreteSignal(f"{self.signal_type}-{other.signal_type}", 0, t1, d, fs, samples=result_samples)
+
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            result_samples = self.samples * other
+            d = len(result_samples) / self.fs
+            return DiscreteSignal(f"{self.signal_type}*{other}", 0, self.t1, d, self.fs, samples=result_samples)
+        elif isinstance(other, DiscreteSignal):
+            s1, s2, t1, fs = self._align(other)
+            result_samples = s1 * s2
+            d = len(result_samples) / fs
+            return DiscreteSignal(f"{self.signal_type}*{other.signal_type}", 0, t1, d, fs, samples=result_samples)
+        else:
+            raise TypeError("Nieobsługiwany typ dla mnożenia")
+
+    def __truediv__(self, other):
+        if isinstance(other, (int, float)):
+            if other == 0:
+                raise ZeroDivisionError("Dzielenie przez zero")
+            result_samples = self.samples / other
+            d = len(result_samples) / self.fs
+            return DiscreteSignal(f"{self.signal_type}/{other}", 0, self.t1, d, self.fs, samples=result_samples)
+        elif isinstance(other, DiscreteSignal):
+            s1, s2, t1, fs = self._align(other)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                result_samples = np.divide(s1, s2, where=s2 != 0, out=np.zeros_like(s1))
+                result_samples[np.abs(s2) < 1e-12] = 0
+            d = len(result_samples) / fs
+            return DiscreteSignal(f"{self.signal_type}/{other.signal_type}", 0, t1, d, fs, samples=result_samples)
+        else:
+            raise TypeError("Nieobsługiwany typ dla dzielenia")
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+
+def translate(text: str) -> str:
+    """Zamienia kod sygnału na opis (działa również na złożonych napisach)."""
+    sorted_keys = sorted(SIGNAL_DESCRIPTIONS.keys(), key=len, reverse=True)
+    pattern = re.compile('|'.join(re.escape(k) for k in sorted_keys))
+    return pattern.sub(lambda m: SIGNAL_DESCRIPTIONS[m.group(0)], text)
