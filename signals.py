@@ -193,9 +193,13 @@ class DiscreteSignal(Signal):
             return DiscreteSignal(f"{self.signal_type}/{other}", 0, self.t1, d, self.fs, samples=result_samples)
         elif isinstance(other, DiscreteSignal):
             s1, s2, t1, fs = self._align(other)
+            eps = 1e-12
+
+            s2_safe = np.where(np.abs(s2) < eps, np.copysign(eps, s2), s2)
+
             with np.errstate(divide='ignore', invalid='ignore'):
-                result_samples = np.divide(s1, s2, where=s2 != 0, out=np.zeros_like(s1))
-                result_samples[np.abs(s2) < 1e-12] = 0
+                result_samples = s1 / s2_safe
+
             d = len(result_samples) / fs
             return DiscreteSignal(f"{self.signal_type}/{other.signal_type}", 0, t1, d, fs, samples=result_samples)
         else:
