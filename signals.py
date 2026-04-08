@@ -1,9 +1,7 @@
-# signals.py (poprawiony)
 import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-# Słownik z opisami sygnałów (używany także w main.py)
 SIGNAL_DESCRIPTIONS = {
     "S1": "Szum o rozkładzie jednostajnym",
     "S2": "Szum gaussowski",

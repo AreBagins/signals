@@ -1,11 +1,9 @@
-# main.py (poprawiony)
 import struct
 import numpy as np
 from signals import ContinousSignal, DiscreteSignal, translate, SIGNAL_DESCRIPTIONS
 
 
 def validate_float(prompt, min_val=None, max_val=None, default=None):
-    """Walidacja liczby zmiennoprzecinkowej z opcjonalnym zakresem."""
     while True:
         try:
             val = input(prompt).strip()
@@ -24,7 +22,6 @@ def validate_float(prompt, min_val=None, max_val=None, default=None):
 
 
 def validate_int(prompt, min_val=None, max_val=None, default=None):
-    """Walidacja liczby całkowitej."""
     while True:
         try:
             val = input(prompt).strip()
@@ -43,7 +40,6 @@ def validate_int(prompt, min_val=None, max_val=None, default=None):
 
 
 def show_signal_list():
-    """Wyświetla listę dostępnych sygnałów z opisami."""
     print("\nDostępne kody sygnałów:")
     for code, desc in SIGNAL_DESCRIPTIONS.items():
         print(f"  {code}: {desc}")
@@ -55,7 +51,6 @@ class SignalApp:
         self.fs = 1000.0  # Domyślna częstotliwość próbkowania
 
     def create_signal(self):
-        """Tworzy nowy sygnał na podstawie kodu i parametrów z walidacją."""
         show_signal_list()
         stype = input("Kod sygnału: ").upper()
         if stype not in SIGNAL_DESCRIPTIONS:
